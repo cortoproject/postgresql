@@ -12,6 +12,7 @@
 #include <libpq-fe.h>
 
 corto_uint8 POSTGRESQL_DB_HANDLE;
+corto_uint8 POSTGRESQL_KEY_HANDLE;
 
 static void postgresql_cleanup(void *userData) {
     PGconn *conn = userData;
@@ -23,6 +24,7 @@ int postgresqlMain(int argc, char* argv[]) {
 /* $begin(main) */
 
     POSTGRESQL_DB_HANDLE = corto_olsKey(postgresql_cleanup);
+    POSTGRESQL_KEY_HANDLE = corto_olsKey(postgresql_cleanup);
 
     return 0;
 /* $end */

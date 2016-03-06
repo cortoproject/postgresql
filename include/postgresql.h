@@ -17,6 +17,7 @@ extern "C" {
 #endif
 
 #include "corto/postgresql/Connector.h"
+#include "corto/fmt/json/json.h"
 
 #ifdef __cplusplus
 }
