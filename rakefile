@@ -1,0 +1,6 @@
+
+PACKAGE = 'corto/postgresql'
+
+LIB = ["pq"]
+
+require "#{ENV['CORTO_BUILD']}/package"
