@@ -51,14 +51,14 @@ corto_int16 _postgresql_Connector_construct(
     /* Initialize database */
     PGresult *res = PQexec(conn,
         "CREATE EXTENSION IF NOT EXISTS ltree;"\
-        "CREATE TABLE IF NOT EXISTS corto ("\
+        "CREATE TABLE IF NOT EXISTS local ("\
             "path ltree unique,"\
             "type text,"\
             "value jsonb);"
     );
 
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        corto_seterr("cannot create corto table: %s", PQerrorMessage(conn));
+        corto_seterr("cannot create 'local' table: %s", PQerrorMessage(conn));
         PQclear(res);
         PQfinish(conn);
         goto error;
@@ -66,6 +66,8 @@ corto_int16 _postgresql_Connector_construct(
 
     /* Register database connection with object */
     corto_olsSet(this, POSTGRESQL_DB_HANDLE, conn);
+
+    corto_replicator_setContentType(this, "text/json");
 
     /* Construct replicator */
     return corto_replicator_construct(this);
@@ -87,7 +89,7 @@ corto_void _postgresql_Connector_onDeclare(
     value = json_fromCorto(observable);
 
     corto_asprintf(&stmt,
-        "INSERT INTO corto(path, type, value) VALUES ('%s','%s','%s') ON CONFLICT DO NOTHING;",
+        "INSERT INTO local (path, type, value) VALUES ('root.%s','%s','%s') ON CONFLICT DO NOTHING;",
         corto_path(path, root_o, observable, "."),
         corto_path(type, root_o, corto_typeof(observable), "/"),
         value
@@ -120,11 +122,9 @@ corto_void _postgresql_Connector_onDelete(
     value = json_fromCorto(observable);
 
     corto_asprintf(&stmt,
-        "DELETE FROM corto WHERE path = '%s';",
+        "DELETE FROM local WHERE path = 'root.%s';",
         corto_path(path, root_o, observable, ".")
     );
-
-    printf("%s\n", stmt);
 
     PGresult *res = PQexec(conn, stmt);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
@@ -148,9 +148,113 @@ corto_resultIter _postgresql_Connector_onRequest(
     corto_bool setContent)
 {
 /* $begin(corto/postgresql/Connector/onRequest) */
-    corto_iter result;
-    memset(&result, 0, sizeof(result));
-    return result;
+    corto_resultList list = corto_llNew();
+    PGconn *conn = corto_olsGet(this, POSTGRESQL_DB_HANDLE);
+    corto_string stmt;
+    corto_id path;
+
+    strcpy(path, "root/");
+    strcat(path, parent);
+    corto_cleanpath(path);
+
+    char *ptr = path, ch;
+    while ((ch = *ptr)) {
+        if (ch == '/') *ptr = '.';
+        ptr++;
+    }
+
+    if (!setContent) {
+        corto_asprintf(&stmt,
+          "SELECT path, type FROM local WHERE subpath(path, 0, nlevel(path) - 1) ~ '%s';",
+          path);
+    } else {
+        corto_asprintf(&stmt,
+          "SELECT path, type, value FROM local WHERE subpath(path, 0, nlevel(path) - 1) ~ '%s';",
+          path);
+    }
+
+    PGresult *res = PQexec(conn, stmt);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        corto_error("SELECT failed: '%s'\n", PQerrorMessage(conn));
+        PQclear(res);
+    } else {
+        /* Expect one field, one row */
+        corto_int32 i, records = PQntuples(res);
+
+        for (i = 0; i < records; i++) {
+          corto_string dbpath = PQgetvalue(res, i, 0);
+          corto_string type = PQgetvalue(res, i, 1);
+          corto_string content = NULL;
+          if (PQnfields(res) > 2) {
+              content = PQgetvalue(res, i, 2);
+          }
+
+          char *pathArray[CORTO_MAX_SCOPE_DEPTH];
+          corto_id path;
+          strcpy(path, dbpath);
+          corto_int32 count = corto_pathToArray(path, pathArray, ".");
+
+          corto_resultSet(
+              corto_resultListAppendAlloc(list),
+              corto_strdup(pathArray[count - 1]),   /* Id */
+              NULL, /* Name is same as id */
+              ".", /* Parent relative to query */
+              type,   /* Type */
+              (corto_word)(content ? corto_strdup(content) : NULL)
+          );
+        }
+
+        PQclear(res);
+    }
+
+    corto_dealloc(stmt);
+
+    return corto_llIterAlloc(list);
+/* $end */
+}
+
+corto_object _postgresql_Connector_onResume(
+    postgresql_Connector this,
+    corto_string parent,
+    corto_string name,
+    corto_object o)
+{
+/* $begin(corto/postgresql/Connector/onResume) */
+    PGconn *conn = corto_olsGet(this, POSTGRESQL_DB_HANDLE);
+    corto_string stmt;
+    corto_id path;
+
+    sprintf(path, "%s/%s", parent, name);
+    corto_cleanpath(path);
+
+    char *ptr = path, ch;
+    while ((ch = *ptr)) {
+        if (ch == '/') *ptr = '.';
+        ptr++;
+    }
+
+    corto_asprintf(&stmt,
+        "SELECT value FROM local WHERE path = '%s';", path);
+
+    PGresult *res = PQexec(conn, stmt);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        printf("not found: '%s'\n", PQerrorMessage(conn));
+        /* If record is not found, the database contains no persistent copy */
+        PQclear(res);
+    } else {
+        /* Expect one field, one row */
+        corto_string json;
+        if ((PQnfields(res) == 1) && (PQntuples(res) == 1)) {
+            json = PQgetvalue(res, 0, 0);
+            if (json_toCorto(o, json)) {
+                corto_error("failed to deserialize '%s': %s",
+                  json, corto_lasterr());
+            }
+        }
+        PQclear(res);
+    }
+
+    return NULL;
 /* $end */
 }
 
@@ -167,7 +271,7 @@ corto_void _postgresql_Connector_onUpdate(
     value = json_fromCorto(observable);
 
     corto_asprintf(&stmt,
-        "UPDATE corto SET value = '%s' WHERE path = '%s';",
+        "UPDATE local SET value = '%s' WHERE path = 'root.%s';",
         value,
         corto_path(path, root_o, observable, ".")
     );

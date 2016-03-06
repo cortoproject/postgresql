@@ -12,3 +12,4 @@ class Connector : core/replicator, hidden::
     void onDeclare(object observable)
     void onUpdate(object observable)
     void onDelete(object observable)
+    object onResume(string parent, string name, object o)

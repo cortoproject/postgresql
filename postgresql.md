@@ -16,6 +16,11 @@
 #### param
 #### setContent
 #### Returns
+### onResume(string parent,string name,object o)
+#### parent
+#### name
+#### o
+#### Returns
 ### onUpdate(object observable)
 #### observable
 ### password
