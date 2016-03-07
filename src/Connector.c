@@ -68,6 +68,7 @@ corto_int16 _postgresql_Connector_construct(
     corto_olsSet(this, POSTGRESQL_DB_HANDLE, conn);
 
     corto_replicator_setContentType(this, "text/json");
+    corto_replicator(this)->kind = CORTO_SINK;
 
     /* Construct replicator */
     return corto_replicator_construct(this);
@@ -90,8 +91,8 @@ corto_void _postgresql_Connector_onDeclare(
 
     corto_asprintf(&stmt,
         "INSERT INTO local (path, type, value) VALUES ('root.%s','%s','%s') ON CONFLICT DO NOTHING;",
-        corto_path(path, root_o, observable, "."),
-        corto_path(type, root_o, corto_typeof(observable), "/"),
+        corto_path(path, corto_replicator(this)->mount, observable, "."),
+        corto_fullpath(type, corto_typeof(observable)),
         value
     );
 
@@ -123,7 +124,7 @@ corto_void _postgresql_Connector_onDelete(
 
     corto_asprintf(&stmt,
         "DELETE FROM local WHERE path = 'root.%s';",
-        corto_path(path, root_o, observable, ".")
+        corto_path(path, corto_replicator(this)->mount, observable, ".")
     );
 
     PGresult *res = PQexec(conn, stmt);
@@ -140,6 +141,38 @@ corto_void _postgresql_Connector_onDelete(
 /* $end */
 }
 
+/* $header(corto/postgresql/Connector/onRequest) */
+typedef struct postgresql_iterData {
+    PGresult *res;
+    corto_int32 i;
+    corto_result result;
+} postgresql_iterData;
+
+void* postgresql_iterNext(corto_iter *iter) {
+    postgresql_iterData *data = iter->udata;
+    data->result.id = PQgetvalue(data->res, data->i, 0);
+    data->result.name = NULL;
+    data->result.type = PQgetvalue(data->res, data->i, 2);
+    data->result.parent = ".";
+    data->result.value = 0;
+    if (PQnfields(data->res) > 3) {
+        data->result.value =
+          (corto_word)corto_strdup(PQgetvalue(data->res, data->i, 3));
+    }
+    data->i ++;
+    return &data->result;
+}
+
+int postgresql_iterHasNext(corto_iter *iter) {
+    postgresql_iterData *data = iter->udata;
+    return data->i < PQntuples(data->res);
+}
+
+void postgresql_iterRelease(corto_iter *iter) {
+    postgresql_iterData *data = iter->udata;
+    PQclear(data->res);
+}
+/* $end */
 corto_resultIter _postgresql_Connector_onRequest(
     postgresql_Connector this,
     corto_string parent,
@@ -148,68 +181,52 @@ corto_resultIter _postgresql_Connector_onRequest(
     corto_bool setContent)
 {
 /* $begin(corto/postgresql/Connector/onRequest) */
-    corto_resultList list = corto_llNew();
     PGconn *conn = corto_olsGet(this, POSTGRESQL_DB_HANDLE);
     corto_string stmt;
     corto_id path;
+    corto_resultIter result;
 
+    /* In the 'local' table, path expressions start with 'root' */
     strcpy(path, "root/");
     strcat(path, parent);
     corto_cleanpath(path);
 
+    /* The scope separator in postgres is a '.' */
     char *ptr = path, ch;
     while ((ch = *ptr)) {
         if (ch == '/') *ptr = '.';
         ptr++;
     }
 
-    if (!setContent) {
-        corto_asprintf(&stmt,
-          "SELECT path, type FROM local WHERE subpath(path, 0, nlevel(path) - 1) ~ '%s';",
-          path);
-    } else {
-        corto_asprintf(&stmt,
-          "SELECT path, type, value FROM local WHERE subpath(path, 0, nlevel(path) - 1) ~ '%s';",
-          path);
-    }
+    corto_asprintf(&stmt,
+        "SELECT subpath(path, nlevel(path)-1, nlevel(path)) AS name,"
+          "subpath(path, 0, nlevel(path)-1) AS parent,"
+          "type "
+          "%s"
+        "FROM local "
+        "WHERE subpath(path, 0, nlevel(path) - 1) ~ '%s';",
+        setContent ? ", value " : "",
+        path);
 
     PGresult *res = PQexec(conn, stmt);
+
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         corto_error("SELECT failed: '%s'\n", PQerrorMessage(conn));
         PQclear(res);
+        memset(&result, 0, sizeof(corto_iter));
     } else {
-        /* Expect one field, one row */
-        corto_int32 i, records = PQntuples(res);
-
-        for (i = 0; i < records; i++) {
-          corto_string dbpath = PQgetvalue(res, i, 0);
-          corto_string type = PQgetvalue(res, i, 1);
-          corto_string content = NULL;
-          if (PQnfields(res) > 2) {
-              content = PQgetvalue(res, i, 2);
-          }
-
-          char *pathArray[CORTO_MAX_SCOPE_DEPTH];
-          corto_id path;
-          strcpy(path, dbpath);
-          corto_int32 count = corto_pathToArray(path, pathArray, ".");
-
-          corto_resultSet(
-              corto_resultListAppendAlloc(list),
-              corto_strdup(pathArray[count - 1]),   /* Id */
-              NULL, /* Name is same as id */
-              ".", /* Parent relative to query */
-              type,   /* Type */
-              (corto_word)(content ? corto_strdup(content) : NULL)
-          );
-        }
-
-        PQclear(res);
+        postgresql_iterData *data = corto_calloc(sizeof(postgresql_iterData));
+        data->res = res;
+        data->i = 0;
+        result.udata = data;
+        result.hasNext = postgresql_iterHasNext;
+        result.next = postgresql_iterNext;
+        result.release = postgresql_iterRelease;
     }
 
     corto_dealloc(stmt);
 
-    return corto_llIterAlloc(list);
+    return result;
 /* $end */
 }
 
@@ -234,7 +251,7 @@ corto_object _postgresql_Connector_onResume(
     }
 
     corto_asprintf(&stmt,
-        "SELECT value FROM local WHERE path = '%s';", path);
+        "SELECT value FROM local WHERE path = 'root.%s';", path);
 
     PGresult *res = PQexec(conn, stmt);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
@@ -246,6 +263,10 @@ corto_object _postgresql_Connector_onResume(
         corto_string json;
         if ((PQnfields(res) == 1) && (PQntuples(res) == 1)) {
             json = PQgetvalue(res, 0, 0);
+            if (!o) {
+                
+            }
+
             if (json_toCorto(o, json)) {
                 corto_error("failed to deserialize '%s': %s",
                   json, corto_lasterr());
@@ -254,7 +275,7 @@ corto_object _postgresql_Connector_onResume(
         PQclear(res);
     }
 
-    return NULL;
+    return o;
 /* $end */
 }
 
@@ -270,10 +291,12 @@ corto_void _postgresql_Connector_onUpdate(
 
     value = json_fromCorto(observable);
 
+    corto_path(path, corto_replicator(this)->mount, observable, ".");
+
     corto_asprintf(&stmt,
         "UPDATE local SET value = '%s' WHERE path = 'root.%s';",
         value,
-        corto_path(path, root_o, observable, ".")
+        path
     );
 
     PGresult *res = PQexec(conn, stmt);
