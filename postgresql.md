@@ -4,17 +4,15 @@
 ### construct()
 #### Returns
 ### hostaddr
+### mask
 ### mount
 ### name
 ### onDeclare(object observable)
 #### observable
 ### onDelete(object observable)
 #### observable
-### onRequest(string parent,string expr,string param,bool setContent)
-#### parent
-#### expr
-#### param
-#### setContent
+### onRequest(/corto/core/request request)
+#### request
 #### Returns
 ### onResume(string parent,string name,object o)
 #### parent
@@ -25,4 +23,5 @@
 #### observable
 ### password
 ### port
+### table
 ### user

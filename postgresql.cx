@@ -3,12 +3,14 @@
 class Connector : core/replicator, hidden::
     int16 construct()
     alias mount: replicator/mount
+    alias mask: replicator/mask
     name : string
+    table: string
     hostaddr : string
     port : uint16
     user : string
     password: string
-    resultIter onRequest(string parent, string expr, string param, bool setContent)
+    resultIter onRequest(core/request request)
     void onDeclare(object observable)
     void onUpdate(object observable)
     void onDelete(object observable)

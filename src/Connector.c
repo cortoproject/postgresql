@@ -19,6 +19,11 @@ corto_int16 _postgresql_Connector_construct(
 /* $begin(corto/postgresql/Connector/construct) */
     char port[6];
 
+    if (!corto_checkAttr(this, CORTO_ATTR_SCOPED)) {
+        corto_seterr("postgresql/Connector objects must be SCOPED");
+        goto error;
+    }
+
     if (this->port) {
         sprintf(port, "%u", this->port);
     } else {
@@ -46,19 +51,25 @@ corto_int16 _postgresql_Connector_construct(
     corto_setstr(&this->user, PQuser(conn));
     corto_setstr(&this->password, PQpass(conn));
     corto_setstr(&this->hostaddr, PQhost(conn));
+    if (!this->table) {
+        corto_setstr(&this->table, "local");
+    }
     this->port = atoi(PQport(conn));
 
+    corto_string stmt;
+    corto_asprintf(&stmt,
+      "CREATE EXTENSION IF NOT EXISTS ltree;"\
+      "CREATE TABLE IF NOT EXISTS %s ("\
+          "path ltree unique,"\
+          "type text,"\
+          "value jsonb);", this->table);
+
     /* Initialize database */
-    PGresult *res = PQexec(conn,
-        "CREATE EXTENSION IF NOT EXISTS ltree;"\
-        "CREATE TABLE IF NOT EXISTS local ("\
-            "path ltree unique,"\
-            "type text,"\
-            "value jsonb);"
-    );
+    PGresult *res = PQexec(conn, stmt);
+    corto_dealloc(stmt);
 
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        corto_seterr("cannot create 'local' table: %s", PQerrorMessage(conn));
+        corto_seterr("cannot create '%s' table: %s", this->table, PQerrorMessage(conn));
         PQclear(res);
         PQfinish(conn);
         goto error;
@@ -90,7 +101,8 @@ corto_void _postgresql_Connector_onDeclare(
     value = json_fromCorto(observable);
 
     corto_asprintf(&stmt,
-        "INSERT INTO local (path, type, value) VALUES ('root.%s','%s','%s') ON CONFLICT DO NOTHING;",
+        "INSERT INTO %s (path, type, value) VALUES ('root.%s','%s','%s') ON CONFLICT DO NOTHING;",
+        this->table,
         corto_path(path, corto_replicator(this)->mount, observable, "."),
         corto_fullpath(type, corto_typeof(observable)),
         value
@@ -117,13 +129,11 @@ corto_void _postgresql_Connector_onDelete(
 /* $begin(corto/postgresql/Connector/onDelete) */
     PGconn *conn = corto_olsGet(this, POSTGRESQL_DB_HANDLE);
     corto_string stmt;
-    corto_string value;
     corto_id path;
 
-    value = json_fromCorto(observable);
-
     corto_asprintf(&stmt,
-        "DELETE FROM local WHERE path = 'root.%s';",
+        "DELETE FROM %s WHERE path = 'root.%s';",
+        this->table,
         corto_path(path, corto_replicator(this)->mount, observable, ".")
     );
 
@@ -135,7 +145,6 @@ corto_void _postgresql_Connector_onDelete(
         PQclear(res);
     }
 
-    corto_dealloc(value);
     corto_dealloc(stmt);
 
 /* $end */
@@ -175,10 +184,7 @@ void postgresql_iterRelease(corto_iter *iter) {
 /* $end */
 corto_resultIter _postgresql_Connector_onRequest(
     postgresql_Connector this,
-    corto_string parent,
-    corto_string expr,
-    corto_string param,
-    corto_bool setContent)
+    corto_request *request)
 {
 /* $begin(corto/postgresql/Connector/onRequest) */
     PGconn *conn = corto_olsGet(this, POSTGRESQL_DB_HANDLE);
@@ -188,7 +194,7 @@ corto_resultIter _postgresql_Connector_onRequest(
 
     /* In the 'local' table, path expressions start with 'root' */
     strcpy(path, "root/");
-    strcat(path, parent);
+    strcat(path, request->parent);
     corto_cleanpath(path);
 
     /* The scope separator in postgres is a '.' */
@@ -203,9 +209,10 @@ corto_resultIter _postgresql_Connector_onRequest(
           "subpath(path, 0, nlevel(path)-1) AS parent,"
           "type "
           "%s"
-        "FROM local "
+        "FROM %s "
         "WHERE subpath(path, 0, nlevel(path) - 1) ~ '%s';",
-        setContent ? ", value " : "",
+        request->content ? ", value " : "",
+        this->table,
         path);
 
     PGresult *res = PQexec(conn, stmt);
@@ -251,7 +258,7 @@ corto_object _postgresql_Connector_onResume(
     }
 
     corto_asprintf(&stmt,
-        "SELECT value FROM local WHERE path = 'root.%s';", path);
+      "SELECT value, type FROM %s WHERE path = 'root.%s';", this->table, path);
 
     PGresult *res = PQexec(conn, stmt);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
@@ -262,16 +269,43 @@ corto_object _postgresql_Connector_onResume(
         /* Expect one field, one row */
         corto_string json;
         if ((PQnfields(res) == 1) && (PQntuples(res) == 1)) {
+            corto_bool newObject = FALSE;
             json = PQgetvalue(res, 0, 0);
+
+            /* If no object is passed to function, create one */
             if (!o) {
-                
+                corto_object parent_o =
+                  corto_resolve(corto_replicator(this)->mount, parent);
+                if (parent) {
+                    corto_object type_o =
+                      corto_resolve(NULL, PQgetvalue(res, 0, 1));
+                    if (type_o) {
+                        o = corto_declareChild(parent_o, name, type_o);
+                        if (!o) {
+                            corto_seterr("failed to create object %s/%s: %s",
+                              parent, name, corto_lasterr());
+                        }
+                        newObject = TRUE;
+                        corto_release(type_o);
+                    }
+                    corto_release(parent_o);
+                }
             }
 
-            if (json_toCorto(o, json)) {
-                corto_error("failed to deserialize '%s': %s",
-                  json, corto_lasterr());
+            /* Deserialize JSON into objec */
+            if (o) {
+                if (json_toCorto(o, json)) {
+                    corto_seterr("failed to deserialize '%s': %s",
+                      json, corto_lasterr());
+                } else if (newObject) {
+                    if (corto_define(o)) {
+                        corto_seterr("failed to define object %s/%s: %s",
+                          parent, name, corto_lasterr());
+                    }
+                }
             }
         }
+
         PQclear(res);
     }
 
@@ -294,7 +328,8 @@ corto_void _postgresql_Connector_onUpdate(
     corto_path(path, corto_replicator(this)->mount, observable, ".");
 
     corto_asprintf(&stmt,
-        "UPDATE local SET value = '%s' WHERE path = 'root.%s';",
+        "UPDATE %s SET value = '%s' WHERE path = 'root.%s';",
+        this->table,
         value,
         path
     );

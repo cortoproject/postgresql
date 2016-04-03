@@ -2,5 +2,6 @@
 PACKAGE = 'corto/postgresql'
 
 LIB = ["pq"]
+INCLUDE = [`pg_config --includedir`[0...-1]]
 
 require "#{ENV['CORTO_BUILD']}/package"
