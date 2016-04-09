@@ -78,11 +78,11 @@ corto_int16 _postgresql_Connector_construct(
     /* Register database connection with object */
     corto_olsSet(this, POSTGRESQL_DB_HANDLE, conn);
 
-    corto_replicator_setContentType(this, "text/json");
-    corto_replicator(this)->kind = CORTO_SINK;
+    corto_mount_setContentType(this, "text/json");
+    corto_mount(this)->kind = CORTO_SINK;
 
-    /* Construct replicator */
-    return corto_replicator_construct(this);
+    /* Construct mount */
+    return corto_mount_construct(this);
 error:
     return -1;
 /* $end */
@@ -103,7 +103,7 @@ corto_void _postgresql_Connector_onDeclare(
     corto_asprintf(&stmt,
         "INSERT INTO %s (path, type, value) VALUES ('root.%s','%s','%s') ON CONFLICT DO NOTHING;",
         this->table,
-        corto_path(path, corto_replicator(this)->mount, observable, "."),
+        corto_path(path, corto_mount(this)->mount, observable, "."),
         corto_fullpath(type, corto_typeof(observable)),
         value
     );
@@ -134,7 +134,7 @@ corto_void _postgresql_Connector_onDelete(
     corto_asprintf(&stmt,
         "DELETE FROM %s WHERE path = 'root.%s';",
         this->table,
-        corto_path(path, corto_replicator(this)->mount, observable, ".")
+        corto_path(path, corto_mount(this)->mount, observable, ".")
     );
 
     PGresult *res = PQexec(conn, stmt);
@@ -262,7 +262,7 @@ corto_object _postgresql_Connector_onResume(
 
     PGresult *res = PQexec(conn, stmt);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-        printf("not found: '%s'\n", PQerrorMessage(conn));
+        corto_error("resume failed: '%s'\n", PQerrorMessage(conn));
         /* If record is not found, the database contains no persistent copy */
         PQclear(res);
     } else {
@@ -275,7 +275,7 @@ corto_object _postgresql_Connector_onResume(
             /* If no object is passed to function, create one */
             if (!o) {
                 corto_object parent_o =
-                  corto_resolve(corto_replicator(this)->mount, parent);
+                  corto_resolve(corto_mount(this)->mount, parent);
                 if (parent) {
                     corto_object type_o =
                       corto_resolve(NULL, PQgetvalue(res, 0, 1));
@@ -325,7 +325,7 @@ corto_void _postgresql_Connector_onUpdate(
 
     value = json_fromCorto(observable);
 
-    corto_path(path, corto_replicator(this)->mount, observable, ".");
+    corto_path(path, corto_mount(this)->mount, observable, ".");
 
     corto_asprintf(&stmt,
         "UPDATE %s SET value = '%s' WHERE path = 'root.%s';",

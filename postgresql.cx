@@ -1,9 +1,9 @@
 #package /corto/postgresql
 
-class Connector : core/replicator, hidden::
+class Connector : core/mount, hidden::
     int16 construct()
-    alias mount: replicator/mount
-    alias mask: replicator/mask
+    alias mount: mount/mount
+    alias mask: mount/mask
     name : string
     table: string
     hostaddr : string
