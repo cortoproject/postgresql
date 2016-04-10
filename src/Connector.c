@@ -95,17 +95,13 @@ corto_void _postgresql_Connector_onDeclare(
 /* $begin(corto/postgresql/Connector/onDeclare) */
     PGconn *conn = corto_olsGet(this, POSTGRESQL_DB_HANDLE);
     corto_string stmt;
-    corto_string value;
     corto_id path, type;
 
-    value = json_fromCorto(observable);
-
     corto_asprintf(&stmt,
-        "INSERT INTO %s (path, type, value) VALUES ('root.%s','%s','%s') ON CONFLICT DO NOTHING;",
+        "INSERT INTO %s (path, type, value) VALUES ('root.%s','%s','null') ON CONFLICT DO NOTHING;",
         this->table,
         corto_path(path, corto_mount(this)->mount, observable, "."),
-        corto_fullpath(type, corto_typeof(observable)),
-        value
+        corto_fullpath(type, corto_typeof(observable))
     );
 
     PGresult *res = PQexec(conn, stmt);
@@ -116,7 +112,6 @@ corto_void _postgresql_Connector_onDeclare(
         PQclear(res);
     }
 
-    corto_dealloc(value);
     corto_dealloc(stmt);
 
 /* $end */
@@ -292,8 +287,8 @@ corto_object _postgresql_Connector_onResume(
                 }
             }
 
-            /* Deserialize JSON into objec */
-            if (o) {
+            /* Deserialize JSON into object */
+            if (o && strcmp(json, "null")) {
                 if (json_toCorto(o, json)) {
                     corto_seterr("failed to deserialize '%s': %s",
                       json, corto_lasterr());
