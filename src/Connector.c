@@ -266,9 +266,9 @@ corto_object _postgresql_Connector_onResume(
         /* If record is not found, the database contains no persistent copy */
         PQclear(res);
     } else {
-        /* Expect one field, one row */
+        /* Expect two fields, one row */
         corto_string json;
-        if ((PQnfields(res) == 1) && (PQntuples(res) == 1)) {
+        if ((PQnfields(res) == 2) && (PQntuples(res) == 1)) {
             corto_bool newObject = FALSE;
             json = PQgetvalue(res, 0, 0);
 
