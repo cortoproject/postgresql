@@ -6,7 +6,7 @@
  * when the file is regenerated.
  */
 
-#include "corto/postgresql/postgresql.h"
+#include <corto/postgresql/postgresql.h>
 
 /* $header() */
 #include <libpq-fe.h>
@@ -190,7 +190,7 @@ corto_resultIter _postgresql_Connector_onRequest(
     /* In the 'local' table, path expressions start with 'root' */
     strcpy(path, "root/");
     strcat(path, request->parent);
-    corto_cleanpath(path);
+    corto_cleanpath(path, path);
 
     /* The scope separator in postgres is a '.' */
     char *ptr = path, ch;
@@ -244,7 +244,7 @@ corto_object _postgresql_Connector_onResume(
     corto_id path;
 
     sprintf(path, "%s/%s", parent, name);
-    corto_cleanpath(path);
+    corto_cleanpath(path, path);
 
     char *ptr = path, ch;
     while ((ch = *ptr)) {

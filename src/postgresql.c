@@ -6,7 +6,7 @@
  * when the file is regenerated.
  */
 
-#include "corto/postgresql/postgresql.h"
+#include <corto/postgresql/postgresql.h>
 
 /* $header() */
 #include <libpq-fe.h>
