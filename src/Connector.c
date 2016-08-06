@@ -196,6 +196,9 @@ corto_resultIter _postgresql_Connector_onRequest(
     strcat(path, request->parent);
     corto_cleanpath(path, path);
 
+    corto_trace("postgresql: request (parent = '%s', expr = '%s')",
+      request->parent, request->expr);
+
     /* The scope separator in postgres is a '.' */
     char *ptr = path, ch;
     while ((ch = *ptr)) {
@@ -203,7 +206,7 @@ corto_resultIter _postgresql_Connector_onRequest(
         ptr++;
     }
 
-    if (request->expr) {
+    if (!strcmp(request->expr, "*")) {
         corto_asprintf(&stmt,
             "SELECT subpath(path, nlevel(path)-1, nlevel(path)) AS name,"
               "subpath(path, 0, nlevel(path)-1) AS parent,"
@@ -221,8 +224,8 @@ corto_resultIter _postgresql_Connector_onRequest(
               "type "
               "%s"
             "FROM %s "
-            "WHERE subpath(path, 0, nlevel(path) - 1) ~ '%s'"
-              "AND name = '%s';",
+            "WHERE subpath(path, 0, nlevel(path) - 1) ~ '%s' "
+              "AND subpath(path, nlevel(path)-1, nlevel(path)) = '%s';",
             request->content ? ", value " : "",
             this->table,
             path,
