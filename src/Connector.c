@@ -104,6 +104,8 @@ corto_void _postgresql_Connector_onDeclare(
         corto_fullpath(type, corto_typeof(observable))
     );
 
+    corto_trace("postgresql: exec %s", stmt);
+
     PGresult *res = PQexec(conn, stmt);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
         corto_error("%s: %s",
@@ -131,6 +133,8 @@ corto_void _postgresql_Connector_onDelete(
         this->table,
         corto_path(path, corto_mount(this)->mount, observable, ".")
     );
+
+    corto_trace("postgresql: exec %s", stmt);
 
     PGresult *res = PQexec(conn, stmt);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
@@ -210,6 +214,8 @@ corto_resultIter _postgresql_Connector_onRequest(
         this->table,
         path);
 
+    corto_trace("postgresql: exec %s", stmt);
+
     PGresult *res = PQexec(conn, stmt);
 
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
@@ -252,8 +258,11 @@ corto_object _postgresql_Connector_onResume(
         ptr++;
     }
 
+
     corto_asprintf(&stmt,
       "SELECT value, type FROM %s WHERE path = 'root.%s';", this->table, path);
+
+    corto_trace("postgresql: exec %s", stmt);
 
     PGresult *res = PQexec(conn, stmt);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
@@ -328,6 +337,8 @@ corto_void _postgresql_Connector_onUpdate(
         value,
         path
     );
+
+    corto_trace("postgresql: exec %s", stmt);
 
     PGresult *res = PQexec(conn, stmt);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
