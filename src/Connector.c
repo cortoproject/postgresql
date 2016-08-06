@@ -203,7 +203,7 @@ corto_resultIter _postgresql_Connector_onRequest(
         ptr++;
     }
 
-    if (r->id) {
+    if (request->id) {
         corto_asprintf(&stmt,
             "SELECT subpath(path, nlevel(path)-1, nlevel(path)) AS name,"
               "subpath(path, 0, nlevel(path)-1) AS parent,"
@@ -226,7 +226,7 @@ corto_resultIter _postgresql_Connector_onRequest(
             request->content ? ", value " : "",
             this->table,
             path,
-            r->id);
+            request->id);
     }
 
     corto_trace("postgresql: exec %s", stmt);
