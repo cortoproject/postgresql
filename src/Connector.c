@@ -203,16 +203,31 @@ corto_resultIter _postgresql_Connector_onRequest(
         ptr++;
     }
 
-    corto_asprintf(&stmt,
-        "SELECT subpath(path, nlevel(path)-1, nlevel(path)) AS name,"
-          "subpath(path, 0, nlevel(path)-1) AS parent,"
-          "type "
-          "%s"
-        "FROM %s "
-        "WHERE subpath(path, 0, nlevel(path) - 1) ~ '%s';",
-        request->content ? ", value " : "",
-        this->table,
-        path);
+    if (r->id) {
+        corto_asprintf(&stmt,
+            "SELECT subpath(path, nlevel(path)-1, nlevel(path)) AS name,"
+              "subpath(path, 0, nlevel(path)-1) AS parent,"
+              "type "
+              "%s"
+            "FROM %s "
+            "WHERE subpath(path, 0, nlevel(path) - 1) ~ '%s';",
+            request->content ? ", value " : "",
+            this->table,
+            path);
+    } else {
+        corto_asprintf(&stmt,
+            "SELECT subpath(path, nlevel(path)-1, nlevel(path)) AS name,"
+              "subpath(path, 0, nlevel(path)-1) AS parent,"
+              "type "
+              "%s"
+            "FROM %s "
+            "WHERE subpath(path, 0, nlevel(path) - 1) ~ '%s'"
+              "AND name = '%s';",
+            request->content ? ", value " : "",
+            this->table,
+            path,
+            r->id);
+    }
 
     corto_trace("postgresql: exec %s", stmt);
 
@@ -257,7 +272,6 @@ corto_object _postgresql_Connector_onResume(
         if (ch == '/') *ptr = '.';
         ptr++;
     }
-
 
     corto_asprintf(&stmt,
       "SELECT value, type FROM %s WHERE path = 'root.%s';", this->table, path);
