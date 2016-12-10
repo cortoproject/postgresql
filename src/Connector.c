@@ -315,7 +315,8 @@ corto_object _postgresql_Connector_onResume(
 
             /* Deserialize JSON into object */
             if (o && strcmp(json, "null")) {
-                if (json_toCorto(o, json)) {
+                corto_value v = corto_value_object(o, NULL);
+                if (json_toValue(&v, json)) {
                     corto_seterr("failed to deserialize '%s': %s",
                       json, corto_lasterr());
                 } else if (newObject) {
@@ -344,7 +345,7 @@ corto_void _postgresql_Connector_onUpdate(
     corto_string value;
     corto_id path;
 
-    value = json_fromCorto(observable);
+    value = json_fromObject(observable);
 
     corto_path(path, corto_mount(this)->mount, observable, ".");
 
