@@ -1,0 +1,25 @@
+language: c
+
+sudo: false
+
+install:
+  - cd ..
+  - mkdir cortoproject
+  - mv postgresql cortoproject/postgresql
+  - cd cortoproject
+  - git clone https://github.com/cortoproject/corto.git
+  - git clone https://github.com/cortoproject/c-binding.git
+  - git clone https://github.com/cortoproject/xml.git
+  - git clone https://github.com/cortoproject/corto-language.git
+  - git clone https://github.com/cortoproject/io.git
+  - git clone https://github.com/cortoproject/json.git
+  - git clone https://github.com/cortoproject/test.git
+  - |+
+    echo 'COMPONENTS = %w(corto c-binding xml corto-language io json test postgresql)
+    require "#{ENV["CORTO_BUILD"]}/forward"' > rakefile
+  - source corto/configure
+  - rake
+  - cd postgresql
+
+script:
+  - rake test
