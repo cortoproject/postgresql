@@ -19,6 +19,10 @@ corto_int16 _postgresql_Connector_construct(
 /* $begin(corto/postgresql/Connector/construct) */
     char port[6];
 
+    if (corto_mount_setContentType(this, "text/json")) {
+        goto error;
+    }
+
     if (!corto_checkAttr(this, CORTO_ATTR_SCOPED)) {
         corto_seterr("postgresql/Connector objects must be SCOPED");
         goto error;
@@ -88,59 +92,56 @@ error:
 /* $end */
 }
 
-corto_void _postgresql_Connector_onDeclare(
+corto_void _postgresql_Connector_onNotify(
     postgresql_Connector this,
-    corto_object observable)
+    corto_eventMask event,
+    corto_result *object)
 {
-/* $begin(corto/postgresql/Connector/onDeclare) */
-    PGconn *conn = corto_olsGet(this, POSTGRESQL_DB_HANDLE);
-    corto_string stmt;
-    corto_id path, type;
-
-    corto_asprintf(&stmt,
-        "INSERT INTO %s (path, type, value) VALUES ('root.%s','%s','null') ON CONFLICT DO NOTHING;",
-        this->table,
-        corto_path(path, corto_mount(this)->mount, observable, "."),
-        corto_fullpath(type, corto_typeof(observable))
-    );
-
-    corto_trace("postgresql: exec %s", stmt);
-
-    PGresult *res = PQexec(conn, stmt);
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        corto_error("%s: %s",
-          corto_fullpath(NULL, observable),
-          PQerrorMessage(conn));
-        PQclear(res);
-    }
-
-    corto_dealloc(stmt);
-
-/* $end */
-}
-
-corto_void _postgresql_Connector_onDelete(
-    postgresql_Connector this,
-    corto_object observable)
-{
-/* $begin(corto/postgresql/Connector/onDelete) */
+/* $begin(corto/postgresql/Connector/onNotify) */
     PGconn *conn = corto_olsGet(this, POSTGRESQL_DB_HANDLE);
     corto_string stmt;
     corto_id path;
 
-    corto_asprintf(&stmt,
-        "DELETE FROM %s WHERE path = 'root.%s';",
-        this->table,
-        corto_path(path, corto_mount(this)->mount, observable, ".")
-    );
+    sprintf(path, "%s/%s", object->parent, object->id);
+    corto_cleanpath(path, path);
+
+    switch (event) {
+    case CORTO_ON_DECLARE:
+        corto_asprintf(
+            &stmt,
+            "INSERT INTO %s (path, type, value) VALUES ('root.%s','%s','null') ON CONFLICT DO NOTHING;",
+            this->table,
+            path,
+            object->type
+        );
+        break;
+    case CORTO_ON_UPDATE:
+        corto_asprintf(
+            &stmt,
+            "UPDATE %s SET value = '%s' WHERE path = 'root.%s';",
+            this->table,
+            corto_result_getText(object),
+            path
+        );
+        break;
+    case CORTO_ON_DELETE:
+        corto_asprintf(
+            &stmt,
+            "DELETE FROM %s WHERE path = 'root.%s';",
+            this->table,
+            path
+        );
+        break;
+    }
 
     corto_trace("postgresql: exec %s", stmt);
-
     PGresult *res = PQexec(conn, stmt);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        corto_error("%s: %s",
-          corto_fullpath(NULL, observable),
-          PQerrorMessage(conn));
+        corto_error(
+            "%s: %s",
+            path,
+            PQerrorMessage(conn)
+        );
         PQclear(res);
     }
 
@@ -332,42 +333,5 @@ corto_object _postgresql_Connector_onResume(
     }
 
     return o;
-/* $end */
-}
-
-corto_void _postgresql_Connector_onUpdate(
-    postgresql_Connector this,
-    corto_object observable)
-{
-/* $begin(corto/postgresql/Connector/onUpdate) */
-    PGconn *conn = corto_olsGet(this, POSTGRESQL_DB_HANDLE);
-    corto_string stmt;
-    corto_string value;
-    corto_id path;
-
-    value = json_fromObject(observable);
-
-    corto_path(path, corto_mount(this)->mount, observable, ".");
-
-    corto_asprintf(&stmt,
-        "UPDATE %s SET value = '%s' WHERE path = 'root.%s';",
-        this->table,
-        value,
-        path
-    );
-
-    corto_trace("postgresql: exec %s", stmt);
-
-    PGresult *res = PQexec(conn, stmt);
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        corto_error("%s: %s",
-          corto_fullpath(NULL, observable),
-          PQerrorMessage(conn));
-        PQclear(res);
-    }
-
-    corto_dealloc(value);
-    corto_dealloc(stmt);
-
 /* $end */
 }
