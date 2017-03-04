@@ -19,6 +19,10 @@ corto_int16 _postgresql_Connector_construct(
 /* $begin(corto/postgresql/Connector/construct) */
     char port[6];
 
+    if (corto_mount_setContentType(this, "text/json")) {
+        goto error;
+    }
+
     if (!corto_checkAttr(this, CORTO_ATTR_SCOPED)) {
         corto_seterr("postgresql/Connector objects must be SCOPED");
         goto error;
@@ -78,7 +82,6 @@ corto_int16 _postgresql_Connector_construct(
     /* Register database connection with object */
     corto_olsSet(this, POSTGRESQL_DB_HANDLE, conn);
 
-    corto_mount_setContentType(this, "text/json");
     corto_mount(this)->kind = CORTO_SINK;
 
     /* Construct mount */
@@ -88,64 +91,69 @@ error:
 /* $end */
 }
 
-corto_void _postgresql_Connector_onDeclare(
+corto_void _postgresql_Connector_onNotify(
     postgresql_Connector this,
-    corto_object observable)
+    corto_eventMask event,
+    corto_result *object)
 {
-/* $begin(corto/postgresql/Connector/onDeclare) */
+/* $begin(corto/postgresql/Connector/onNotify) */
     PGconn *conn = corto_olsGet(this, POSTGRESQL_DB_HANDLE);
-    corto_string stmt;
-    corto_id path, type;
-
-    corto_asprintf(&stmt,
-        "INSERT INTO %s (path, type, value) VALUES ('root.%s','%s','null') ON CONFLICT DO NOTHING;",
-        this->table,
-        corto_path(path, corto_mount(this)->mount, observable, "."),
-        corto_fullpath(type, corto_typeof(observable))
-    );
-
-    corto_trace("postgresql: exec %s", stmt);
-
-    PGresult *res = PQexec(conn, stmt);
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        corto_error("%s: %s",
-          corto_fullpath(NULL, observable),
-          PQerrorMessage(conn));
-        PQclear(res);
-    }
-
-    corto_dealloc(stmt);
-
-/* $end */
-}
-
-corto_void _postgresql_Connector_onDelete(
-    postgresql_Connector this,
-    corto_object observable)
-{
-/* $begin(corto/postgresql/Connector/onDelete) */
-    PGconn *conn = corto_olsGet(this, POSTGRESQL_DB_HANDLE);
-    corto_string stmt;
+    corto_string stmt = 0;
     corto_id path;
 
-    corto_asprintf(&stmt,
-        "DELETE FROM %s WHERE path = 'root.%s';",
-        this->table,
-        corto_path(path, corto_mount(this)->mount, observable, ".")
-    );
+    sprintf(path, "%s/%s", object->parent, object->id);
+    corto_cleanpath(path, path);
+
+    corto_trace("postgresql: notify: event = %d, path = %s, type = %s",
+        event, path, object->type);
+
+    switch (event) {
+    case CORTO_ON_DEFINE:
+        corto_asprintf(
+            &stmt,
+            "INSERT INTO %s (path, type, value) VALUES ('root.%s','%s','null') ON CONFLICT DO NOTHING;",
+            this->table,
+            path,
+            object->type
+        );
+        break;
+    case CORTO_ON_UPDATE:
+        corto_asprintf(
+            &stmt,
+            "UPDATE %s SET value = '%s' WHERE path = 'root.%s';",
+            this->table,
+            corto_result_getText(object),
+            path
+        );
+        break;
+    case CORTO_ON_DELETE:
+        corto_asprintf(
+            &stmt,
+            "DELETE FROM %s WHERE path = 'root.%s';",
+            this->table,
+            path
+        );
+        break;
+    }
+
+    if (!stmt) {
+        goto finish;
+    }
 
     corto_trace("postgresql: exec %s", stmt);
-
     PGresult *res = PQexec(conn, stmt);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        corto_error("%s: %s",
-          corto_fullpath(NULL, observable),
-          PQerrorMessage(conn));
+        corto_error(
+            "%s: %s",
+            path,
+            PQerrorMessage(conn)
+        );
         PQclear(res);
     }
 
     corto_dealloc(stmt);
 
+finish:;
 /* $end */
 }
 
@@ -168,6 +176,7 @@ void* postgresql_iterNext(corto_iter *iter) {
           (corto_word)corto_strdup(PQgetvalue(data->res, data->i, 3));
     }
     data->i ++;
+    corto_trace("postgresql: query returned '%s/%s'", data->result.parent, data->result.id)
     return &data->result;
 }
 
@@ -266,6 +275,7 @@ corto_object _postgresql_Connector_onResume(
     PGconn *conn = corto_olsGet(this, POSTGRESQL_DB_HANDLE);
     corto_string stmt;
     corto_id path;
+    corto_bool resumed = FALSE;
 
     sprintf(path, "%s/%s", parent, name);
     corto_cleanpath(path, path);
@@ -279,7 +289,7 @@ corto_object _postgresql_Connector_onResume(
     corto_asprintf(&stmt,
       "SELECT value, type FROM %s WHERE path = 'root.%s';", this->table, path);
 
-    corto_trace("postgresql: exec %s", stmt);
+    corto_trace("postgresql: resume: exec %s", stmt);
 
     PGresult *res = PQexec(conn, stmt);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
@@ -292,6 +302,10 @@ corto_object _postgresql_Connector_onResume(
         if ((PQnfields(res) == 2) && (PQntuples(res) == 1)) {
             corto_bool newObject = FALSE;
             json = PQgetvalue(res, 0, 0);
+
+            resumed = TRUE;
+
+            corto_trace("postgresql: resuming: %s", json);
 
             /* If no object is passed to function, create one */
             if (!o) {
@@ -315,7 +329,8 @@ corto_object _postgresql_Connector_onResume(
 
             /* Deserialize JSON into object */
             if (o && strcmp(json, "null")) {
-                if (json_toCorto(o, json)) {
+                corto_value v = corto_value_object(o, NULL);
+                if (json_toValue(&v, json)) {
                     corto_seterr("failed to deserialize '%s': %s",
                       json, corto_lasterr());
                 } else if (newObject) {
@@ -330,43 +345,6 @@ corto_object _postgresql_Connector_onResume(
         PQclear(res);
     }
 
-    return o;
-/* $end */
-}
-
-corto_void _postgresql_Connector_onUpdate(
-    postgresql_Connector this,
-    corto_object observable)
-{
-/* $begin(corto/postgresql/Connector/onUpdate) */
-    PGconn *conn = corto_olsGet(this, POSTGRESQL_DB_HANDLE);
-    corto_string stmt;
-    corto_string value;
-    corto_id path;
-
-    value = json_fromCorto(observable);
-
-    corto_path(path, corto_mount(this)->mount, observable, ".");
-
-    corto_asprintf(&stmt,
-        "UPDATE %s SET value = '%s' WHERE path = 'root.%s';",
-        this->table,
-        value,
-        path
-    );
-
-    corto_trace("postgresql: exec %s", stmt);
-
-    PGresult *res = PQexec(conn, stmt);
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        corto_error("%s: %s",
-          corto_fullpath(NULL, observable),
-          PQerrorMessage(conn));
-        PQclear(res);
-    }
-
-    corto_dealloc(value);
-    corto_dealloc(stmt);
-
+    return resumed ? o : NULL;
 /* $end */
 }
