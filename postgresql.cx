@@ -3,7 +3,7 @@
 class Connector : core/mount, hidden::
     int16 construct()
     alias mount: mount/mount
-    alias mask: mount/mask
+    alias mask: observer/mask
     name : string
     table: string
     hostaddr : string
@@ -11,7 +11,5 @@ class Connector : core/mount, hidden::
     user : string
     password: string
     resultIter onRequest(core/request request)
-    void onDeclare(object observable)
-    void onUpdate(object observable)
-    void onDelete(object observable)
+    void onNotify(core/eventMask event,core/result object)
     object onResume(string parent, string name, object o)

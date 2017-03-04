@@ -98,6 +98,7 @@ corto_void _postgresql_Connector_onNotify(
 {
 /* $begin(corto/postgresql/Connector/onNotify) */
     PGconn *conn = corto_olsGet(this, POSTGRESQL_DB_HANDLE);
+
     corto_string stmt = 0;
     corto_id path;
 

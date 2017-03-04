@@ -7,13 +7,15 @@
 #define CORTO_POSTGRESQL_H
 
 #include <corto/corto.h>
-#include <corto/postgresql/_interface.h>
+#include <corto/postgresql/_project.h>
 #include <corto/fmt/json/json.h>
+#include <corto/core/c/c.h>
+#include <corto/lang/c/c.h>
 
 #include <corto/postgresql/_type.h>
-#include <corto/postgresql/_api.h>
-#include <corto/postgresql/_meta.h>
 
+#include <corto/postgresql/_api.h>
+#include <corto/postgresql/_load.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
