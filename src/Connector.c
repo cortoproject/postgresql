@@ -112,10 +112,11 @@ corto_void _postgresql_Connector_onNotify(
     case CORTO_ON_DEFINE:
         corto_asprintf(
             &stmt,
-            "INSERT INTO %s (path, type, value) VALUES ('root.%s','%s','null') ON CONFLICT DO NOTHING;",
+            "INSERT INTO %s (path, type, value) VALUES ('root.%s','%s','%s') ON CONFLICT DO NOTHING;",
             this->table,
             path,
-            object->type
+            object->type,
+            corto_result_getText(object)
         );
         break;
     case CORTO_ON_UPDATE:
