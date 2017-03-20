@@ -1,0 +1,17 @@
+#package /test
+
+struct User::
+    name: string
+    age: int16
+
+object users
+
+// /corto/postgresql/Connector testConnector: users, ON_SCOPE, "postgres", "users", "postgres", 5432, "postgres", "password"
+
+test::Suite ConnectorTest::
+    userScope: object
+    connector: /corto/postgresql/Connector
+
+    void setUp() method
+    void tearDown() method
+    void tc_saveUser()
