@@ -7,23 +7,33 @@
 #define CORTO_POSTGRESQL_H
 
 #include <corto/corto.h>
+#include <corto/corto.h>
 #include <corto/postgresql/_project.h>
 #include <corto/fmt/json/json.h>
 #include <corto/core/c/c.h>
 #include <corto/lang/c/c.h>
 
-#include <corto/postgresql/_type.h>
+/* $header() */
+/* Enter additional code here. */
+/* $end */
 
-#include <corto/postgresql/_api.h>
+#include <corto/postgresql/_type.h>
 #include <corto/postgresql/_load.h>
+#include <corto/postgresql/_api.h>
+
+/* $body() */
+/* Enter code that requires types here */
+/* $end */
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 #include <corto/postgresql/Connector.h>
 
 #ifdef __cplusplus
 }
 #endif
+
 #endif
 
