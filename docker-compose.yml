@@ -1,0 +1,17 @@
+version: "2.1"
+
+services:
+
+  postgres:
+    container_name: postgres
+    image: postgres:9.5.5
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    healthcheck:
+      test: su postgres -c pg_isready || exit 1
+      timeout: "2s"
+      interval: "5s"
+      retries: 5
+    ports:
+      - "5432:5432"
