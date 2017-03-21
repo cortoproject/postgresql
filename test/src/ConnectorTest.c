@@ -13,7 +13,7 @@ corto_void _test_ConnectorTest_setUp(
 {
 /* $begin(test/ConnectorTest/setUp) */
     corto_object users = corto_lookup(NULL, "/test/users");
-    test_assert(users);
+    test_assert(users != NULL);
     corto_setref(&this->userScope, users); // TODO check error
     test_assert(this->userScope != NULL);
 
