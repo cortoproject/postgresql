@@ -20,7 +20,7 @@ static void postgresql_cleanup(void *userData) {
 }
 /* $end */
 
-int postgresqlMain(int argc, char* argv[]) {
+int postgresqlMain(int argc, char *argv[]) {
 /* $begin(main) */
 
     POSTGRESQL_DB_HANDLE = corto_olsKey(postgresql_cleanup);
