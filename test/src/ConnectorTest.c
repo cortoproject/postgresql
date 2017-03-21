@@ -12,16 +12,16 @@ corto_void _test_ConnectorTest_setUp(
     test_ConnectorTest this)
 {
 /* $begin(test/ConnectorTest/setUp) */
-    corto_object users = corto_lookup(NULL, "/test/users");
-    test_assert(users != NULL);
-    corto_setref(&this->userScope, users); // TODO check error
+    corto_object usersScope = corto_createChild(NULL, "usersScope", corto_object_o);
+    test_assert(usersScope != NULL);
+    corto_setref(&this->userScope, usersScope);
     test_assert(this->userScope != NULL);
 
     corto_object connector = postgresql_ConnectorCreateChild(
         NULL, "testConnector", this->userScope, CORTO_ON_SCOPE, "postgres",
         "Users", "localhost", 5432, "postgres", "password"
     );
-    corto_setref(&this->connector, connector); // TODO check error
+    corto_setref(&this->connector, connector);
 
     corto_release(this->userScope);
     test_assert(this->connector != NULL);
