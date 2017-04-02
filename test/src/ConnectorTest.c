@@ -32,8 +32,17 @@ corto_void _test_ConnectorTest_tc_saveUser(
     test_ConnectorTest this)
 {
 /* $begin(test/ConnectorTest/tc_saveUser) */
+    corto_int32 sig = 0;
+    corto_int8 ret = 0;
+
+    test_assert(this->userScope != NULL);
     test_User *user = test_UserCreateChild(this->userScope, "userTestSaveUser", "Bob", 40);
     test_assert(user != NULL);
+
+    corto_pid pid = corto_procrun("psql", (char**){"-U", "postgres", "-d", "postgres", "-c", "SELECT * FROM Users"})
+    sig = corto_procwait(pid, &ret);
+    test_assert(sig == 0);
+    test_assert(ret == 0);
 
     corto_iter it;
     corto_int16 ret = corto_select("/users", "userTestSaveUser").iter(&it);
