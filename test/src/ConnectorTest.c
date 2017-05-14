@@ -14,14 +14,14 @@ corto_void _test_ConnectorTest_setUp(
 /* $begin(test/ConnectorTest/setUp) */
     corto_object users = corto_lookup(NULL, "/test/users");
     test_assert(users != NULL);
-    corto_setref(&this->userScope, users); // TODO check error
+    corto_ptr_setref(&this->userScope, users); // TODO check error
     test_assert(this->userScope != NULL);
 
     corto_object connector = postgresql_ConnectorCreateChild(
         NULL, "testConnector", this->userScope, CORTO_ON_SCOPE, "postgres",
         "Users", "localhost", 5432, "postgres", "password"
     );
-    corto_setref(&this->connector, connector); // TODO check error
+    corto_ptr_setref(&this->connector, connector); // TODO check error
 
     corto_release(this->userScope);
     test_assert(this->connector != NULL);
@@ -39,12 +39,12 @@ corto_void _test_ConnectorTest_tc_saveUser(
     corto_int16 ret = corto_select("/users", "userTestSaveUser").iter(&it);
     test_assert(ret == 0);
 
-    test_assert(corto_iterHasNext(&it));
-    corto_result *r = corto_iterNext(&it);
+    test_assert(corto_iter_hasNext(&it));
+    corto_result *r = corto_iter_next(&it);
     test_assertstr(r->id, "userTestSaveUser");
     test_assertstr(r->parent, ".");
     test_assertstr(r->type, "/User");
-    test_assert(!corto_iterHasNext(&it));
+    test_assert(!corto_iter_hasNext(&it));
 /* $end */
 }
 

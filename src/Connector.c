@@ -51,12 +51,12 @@ corto_int16 _postgresql_Connector_construct(
     }
 
     /* Set default to actual parameters */
-    corto_setstr(&this->name, PQdb(conn));
-    corto_setstr(&this->user, PQuser(conn));
-    corto_setstr(&this->password, PQpass(conn));
-    corto_setstr(&this->hostaddr, PQhost(conn));
+    corto_ptr_setstr(&this->name, PQdb(conn));
+    corto_ptr_setstr(&this->user, PQuser(conn));
+    corto_ptr_setstr(&this->password, PQpass(conn));
+    corto_ptr_setstr(&this->hostaddr, PQhost(conn));
     if (!this->table) {
-        corto_setstr(&this->table, "local");
+        corto_ptr_setstr(&this->table, "local");
     }
     this->port = atoi(PQport(conn));
 

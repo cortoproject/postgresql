@@ -1,6 +1,6 @@
-#package /corto/postgresql
+in package /corto/postgresql
 
-class Connector : core/mount, hidden::
+class Connector : core/mount, hidden:/
     int16 construct()
     alias mount: mount/mount
     alias mask: observer/mask
@@ -10,6 +10,8 @@ class Connector : core/mount, hidden::
     port : uint16
     user : string
     password: string
-    resultIter onRequest(core/request request)
-    void onNotify(core/eventMask event,core/result object)
-    object onResume(string parent, string name, object o)
+    
+    resultIter onRequest(core/request request) override
+    void onNotify(core/eventMask event,core/result object) override
+    object onResume(string parent, string name, object o) override
+    string onId() override
