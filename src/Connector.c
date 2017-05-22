@@ -13,7 +13,7 @@
 extern corto_uint8 POSTGRESQL_DB_HANDLE;
 /* $end */
 
-corto_int16 _postgresql_Connector_construct(
+int16_t _postgresql_Connector_construct(
     postgresql_Connector this)
 {
 /* $begin(corto/postgresql/Connector/construct) */
