@@ -91,7 +91,15 @@ error:
 /* $end */
 }
 
-corto_void _postgresql_Connector_onNotify(
+corto_string _postgresql_Connector_onId(
+    postgresql_Connector this)
+{
+/* $begin(corto/postgresql/Connector/onId) */
+    return NULL;
+/* $end */
+}
+
+void _postgresql_Connector_onNotify(
     postgresql_Connector this,
     corto_eventMask event,
     corto_result *object)
